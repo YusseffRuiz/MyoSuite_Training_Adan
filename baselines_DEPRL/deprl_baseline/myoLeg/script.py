@@ -9,6 +9,7 @@ import yaml
 from deprl import custom_distributed
 from deprl.utils import prepare_params
 from deprl.vendor import tonic
+from deprl.vendor.tonic import logger
 
 
 def maybe_load_checkpoint(
@@ -22,14 +23,32 @@ def maybe_load_checkpoint(
     eff_path,
 ):
     if os.path.isdir(checkpoint_path):
-        #checkpoint_path = "baselines_DEPRL/deprl_baseline/checkpoints"
         tonic.logger.log(f"Loading experiment from {eff_path}")
+        try:
+            time_dict = torch.load(
+                os.path.join(eff_path, "checkpoints/time.pt")
+            )
+        except FileNotFoundError as e:
+            tonic.logger.log(
+                f"Error in loading, starting fresh. Error was: {e}"
+            )
+            checkpoint_path = None
+            return (
+                header,
+                agent,
+                environment,
+                trainer,
+                time_dict,
+                checkpoint_path,
+            )
+
         # Use no checkpoint, the agent is freshly created.
         if checkpoint == "none":
             tonic.logger.log("Not loading any weights")
 
         else:
             # List all the checkpoints.
+            print("Checkpoint found on: ", checkpoint_path)
             checkpoint_ids = []
             for file in os.listdir(checkpoint_path):
                 if file[:5] == "step_":
@@ -43,7 +62,6 @@ def maybe_load_checkpoint(
                     checkpoint_path = os.path.join(
                         checkpoint_path, f"step_{checkpoint_id}"
                     )
-
                 # Use the specified checkpoint.
                 else:
                     checkpoint_id = int(checkpoint)
@@ -56,6 +74,7 @@ def maybe_load_checkpoint(
                             f"Checkpoint {checkpoint_id} not found in {checkpoint_path}"
                         )
                         checkpoint_path = None
+
             else:
                 tonic.logger.error(f"No checkpoint found in {checkpoint_path}")
                 checkpoint_path = None
@@ -95,6 +114,7 @@ def train(
     checkpoint,
     path,
     preid=0,
+    full_save=False,
     env_args=None,
 ):
     """Trains an agent on an environment."""
@@ -114,7 +134,6 @@ def train(
     eff_path = os.path.join(path, environment_name, name)
     # Process the checkpoint path same way as in tonic.play
     checkpoint_path = os.path.join(eff_path, "checkpoints")
-    print("checkpoint_path: , ", checkpoint_path)
     time_dict = {"steps": 0, "epochs": 0, "episodes": 0}
     (
         header,
@@ -153,6 +172,7 @@ def train(
         parallel,
         sequential,
         env_args=env_args,
+        header=header,
     )
     environment.initialize(seed=seed)
     # Build the testing environment.
@@ -184,10 +204,8 @@ def train(
     # Load the weights of the agent form a checkpoint.
     if checkpoint_path:
         agent.load(checkpoint_path)
-        print("checkpoint_path found, ", checkpoint_path)
-    else:
-        print("no checkpoint path found", checkpoint_path)
-
+        print("loaded weights from: ", checkpoint_path)
+    print("checkpoint: ", checkpoint_path)
     # Initialize the logger to save data to the path environment/name/seed.
     if not environment_name:
         if hasattr(test_environment, "name"):
@@ -209,7 +227,10 @@ def train(
     trainer = trainer or "tonic.Trainer()"
     trainer = eval(trainer)
     trainer.initialize(
-        agent=agent, environment=environment, test_environment=test_environment
+        agent=agent,
+        environment=environment,
+        test_environment=test_environment,
+        full_save=full_save,
     )
 
     # Run some code before training.
@@ -228,12 +249,18 @@ def train(
         exec(after_training)
 
 
-if __name__ == "__main__":
-    try:
-        torch.zeros((0, 1), device="cuda")
-        torch.set_default_tensor_type("torch.cuda.FloatTensor")
-    except Exception as e:
-        print(f"No cuda detected, running on cpu: {e}")
+def main():
+    # use CUDA or apple metal
+    if torch.cuda.is_available():
+        torch.set_default_device("cuda")
+        print("cuda training")
+    elif torch.backends.mps.is_available():
+        torch.set_default_device("mps")
+        print("mps training")
+    else:
+        logger.log("No CUDA or MPS detected, running on CPU")
+        print("Running on CPU")
+
     orig_params, params = prepare_params()
     train_params = dict(orig_params["tonic"])
     train_params["path"] = orig_params["working_dir"]
@@ -245,3 +272,7 @@ if __name__ == "__main__":
             else train_params["env_args"]
         )
     train(orig_params, **train_params)
+
+
+if __name__ == "__main__":
+    main()

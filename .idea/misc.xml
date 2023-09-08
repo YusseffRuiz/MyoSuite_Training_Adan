@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="ProjectRootManager" version="2" project-jdk-name="myosuiteLast" project-jdk-type="Python SDK" />
+  <component name="Black">
+    <option name="enabledOnReformat" value="true" />
+    <option name="enabledOnSave" value="true" />
+    <option name="sdkUUID" value="ed89c7ab-3738-47bf-b1ee-80cfe188e912" />
+  </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="MyoSuite" project-jdk-type="Python SDK" />
 </project>

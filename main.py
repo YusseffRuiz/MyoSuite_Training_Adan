@@ -7,7 +7,6 @@ Authors  :: Vikash Kumar (vikashplus@gmail.com), Vittorio Caggiano (caggiano@gma
 import myosuite
 import gym
 import deprl
-import ReflexCrtInterface
 import numpy as np
 import torch
 
