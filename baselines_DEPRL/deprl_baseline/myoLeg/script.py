@@ -204,7 +204,7 @@ def train(
     # Load the weights of the agent form a checkpoint.
     if checkpoint_path:
         agent.load(checkpoint_path)
-        print("loaded weights from: ", checkpoint_path)
+        #print("loaded weights from: ", checkpoint_path)
     print("checkpoint: ", checkpoint_path)
     # Initialize the logger to save data to the path environment/name/seed.
     if not environment_name:
