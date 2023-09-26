@@ -10,7 +10,7 @@
     "parallel": 7,
     "sequential": 7,
     "seed": 0,
-    "name": "myoLeg_original",
+    "name": "myoLeg_Up",
     "environment_name": "deprl_baseline",
     "checkpoint": "last",
     "path": ""

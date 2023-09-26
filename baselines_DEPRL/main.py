@@ -16,19 +16,21 @@ env = gym.make('myoChallengeChaseTagP1-v0')
 
 
 policy = deprl.load_baseline(env)
-obs = env.reset()
 tot_episodes = 5
+visual = False
+randAction = False
 
 for ep in range(tot_episodes):
     print(f'Episode: {ep + 1} of {tot_episodes}')
     obs = env.reset()
     done = False
     while not done:
-        action = policy(obs)
-        # action = env.action_space.sample()
-        # uncomment if you want to render the task
-        env.mj_render()
-
+        if randAction:
+            action = env.action_space.sample()
+        else:
+            action = policy(obs)
+        if visual:
+            env.mj_render()
         next_state, reward, done, info = env.step(action)
         obs = next_state
     print("Reward: ", reward)
