@@ -6,22 +6,14 @@ import traceback
 import torch
 import yaml
 
+
 from deprl import custom_distributed
 from deprl.utils import prepare_params
 from deprl.vendor import tonic
 from deprl.vendor.tonic import logger
 
 
-def maybe_load_checkpoint(
-    header,
-    agent,
-    environment,
-    trainer,
-    time_dict,
-    checkpoint_path,
-    checkpoint,
-    eff_path,
-):
+def maybe_load_checkpoint(header,agent,environment,trainer,time_dict,checkpoint_path,checkpoint,eff_path):
     if os.path.isdir(checkpoint_path):
         tonic.logger.log(f"Loading experiment from {eff_path}")
         """
@@ -238,6 +230,9 @@ def train(
     if before_training:
         exec(before_training)
 
+        #RunningEnv.loadPolicies()
+        #RunningEnv.runningScenario()
+
     # Train.
     try:
         scores = trainer.run(orig_params, **time_dict)
@@ -262,6 +257,8 @@ def main():
         logger.log("No CUDA or MPS detected, running on CPU")
         print("Running on CPU")
 
+
+
     orig_params, params = prepare_params()
     train_params = dict(orig_params["tonic"])
     train_params["path"] = orig_params["working_dir"]
@@ -273,6 +270,7 @@ def main():
             else train_params["env_args"]
         )
     train(orig_params, **train_params)
+
 
 
 if __name__ == "__main__":
