@@ -4,7 +4,7 @@ agent: deprl.custom_agents.dep_factory(3, deprl.custom_mpo_torch.TunedMPO())(rep
 before_training: ''
 checkpoint: last
 env_args: {}
-environment: deprl.environments.Gym('myoChallengeChaseTagP1-v0', reset_type='random',
+environment: deprl.environments.Gym('myoChallengeChaseTagP1-v1', reset_type='random',
   scaled_actions=False)
 environment_name: deprl_baseline
 full_save: false

@@ -24,6 +24,7 @@ def maybe_load_checkpoint(
 ):
     if os.path.isdir(checkpoint_path):
         tonic.logger.log(f"Loading experiment from {eff_path}")
+        """
         try:
             time_dict = torch.load(
                 os.path.join(eff_path, "checkpoints/time.pt")
@@ -41,14 +42,14 @@ def maybe_load_checkpoint(
                 time_dict,
                 checkpoint_path,
             )
-
+        """
         # Use no checkpoint, the agent is freshly created.
         if checkpoint == "none":
             tonic.logger.log("Not loading any weights")
 
         else:
             # List all the checkpoints.
-            print("Checkpoint found on: ", checkpoint_path)
+            tonic.logger.log("Checkpoint found on: {checkpoint_path}")
             checkpoint_ids = []
             for file in os.listdir(checkpoint_path):
                 if file[:5] == "step_":
