@@ -4,6 +4,7 @@ Modifications made by Adan Dominguez
 Based on the work done by:
 Authors  :: Vikash Kumar (vikashplus@gmail.com), Vittorio Caggiano (caggiano@gmail.com)
 ================================================= """
+
 import myosuite
 import gym
 import deprl
@@ -15,19 +16,20 @@ import os
 
 
 
-
 # env = gym.make('myoLegWalk-v0', reset_type='random')
 #foldername = "baselines_DEPRL\deprl_baseline\myoLeg_Test_0210"
 foldername = "baselines_DEPRL\myoLegWalk_20230514\myoLeg"
+#foldername = "baselines_DEPRL\deprl_baseline\myo_amputation_1"
 env_walk = "myoLegWalk-v0"
 env_rough = "myoLegRoughTerrainWalk-v0"
 env_chase = "myoChallengeChaseTagP1-v1"
-env = gym.make(env_rough, reset_type='random')
+env_amp = "myoAmpWalk-v0"
+env = gym.make(env_amp, reset_type='init')
 
 
-policy = deprl.load(path=foldername,environment=env)
-#policy = deprl.load(foldername, env)
-tot_episodes = 10
+##policy = deprl.load(path=foldername,environment=env)
+policy = deprl.load(foldername, env)
+tot_episodes = 5
 visual = True
 randAction = True
 
