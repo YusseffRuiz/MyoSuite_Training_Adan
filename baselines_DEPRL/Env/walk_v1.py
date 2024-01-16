@@ -26,6 +26,7 @@ class WalkEnvV0(BaseV0):
     ]
 
     DEFAULT_RWD_KEYS_AND_WEIGHTS = {
+        #increase reward per time walking
         "vel_reward": 5.0,
         "done": -100,
         "cyclic_hip": -10,
@@ -181,14 +182,13 @@ class WalkEnvV0(BaseV0):
         return np.clip(self.sim.data.actuator_velocity, -100, 100)
 
     def _get_done(self):
-        # height = self._get_height()
-        # if height < self.min_height:
-        #    return 1
+        height = self._get_height()
+        if height < self.min_height:
+            return 1
         if self._get_knee_condition():
             return 1
-
-        # if self._get_rot_condition():
-        #    return 1
+        if self._get_rot_condition():
+            return 1
         return 0
 
     def _get_joint_angle_rew(self, joint_names):
@@ -286,8 +286,8 @@ class WalkEnvV0(BaseV0):
         feet_heights = self._get_feet_heights()
         torso = self.sim.model.body_name2id("torso")
         com_height = self._get_height()
-        # if com_height - np.mean(feet_heights) < 0.61:
-        #    return 1
+        if com_height - np.mean(feet_heights) < 0.61:
+            return 1
         if np.mean(self.sim.data.body_xpos[torso][2]) - np.mean(feet_heights) < 0.61:
             return 1
         else:
@@ -489,12 +489,12 @@ class TerrainEnvV0(WalkEnvV0):
 
     def _get_done(self):
         height = self._get_height()
-        ##if height < self.min_height:
-        ##    return 1
+        if height < self.min_height:
+            return 1
         if self._get_rot_condition():
             return 1
-        ##if self._get_knee_condition():
-        ##    return 1
+        if self._get_knee_condition():
+            return 1
         return 0
 
     def _get_knee_condition(self):
