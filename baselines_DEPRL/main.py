@@ -15,6 +15,9 @@ import cv2
 import os
 
 
+
+
+
 # env = gym.make('myoLegWalk-v0', reset_type='random')
 # foldername = "baselines_DEPRL\deprl_baseline\myoLeg_Test_0210"
 foldername = "baselines_DEPRL\myoLegWalk_20230514\myoLeg"
@@ -34,12 +37,11 @@ tot_episodes = 5
 visual = True
 randAction = False
 plotFlag = False
-ampFlag = True
+ampFlag = False
 
 
 # TODO
 # Guardar cada uno de los pasos en frames para armar un video.
-# Describir lo que se castiga y las opciones de ganar.
 # Describir como se entrenó al sistema de red neuronal, compuesto por 2 capas para cada uno de los músculos del cuerpo, con un sistema de entrenamiento MPO
 
 
