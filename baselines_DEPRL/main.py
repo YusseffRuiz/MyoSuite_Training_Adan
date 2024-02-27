@@ -1,43 +1,63 @@
 """ =================================================
-# Copyright (c) Facebook, Inc. and its affiliates
-Modifications made by Adan Dominguez
-Based on the work done by:
-Authors  :: Vikash Kumar (vikashplus@gmail.com), Vittorio Caggiano (caggiano@gmail.com)
+Author  :: Adan Dominguez (adanydr@outlook.com)
 ================================================= """
 
 import myosuite
-import gym
+# import gymnasium as gym # if using classical gymnasium environments, use this import
+# import gym #  if using myosuite, use this import
 import deprl
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 
 import cv2
 import os
 
-def modelCharacteristics(env, getNames=False):
+
+def modelCharacteristics(env, importGymnasium = False, getNames=False):
     # Testing of muscles and actuators
+    if not importGymnasium:
+        position = env.sim.data.qpos.tolist()
+        velocity = env.sim.data.qvel.tolist()
+        muscles = env.sim.data.actuator_force.tolist()
+        tendons_len = env.sim.data.ten_length.tolist()
+        action = env.action_space.sample()
+
+        print("total number of DoF in the model: ", env.sim.model.nv)
+        print("position: ", position)
+
+        print("total muscles: ", len(muscles))
+        print("Muscles: ", muscles)
+        print("total Tendons: ", tendons_len)
+        print("Number of actions in the model: ", len(action))
+        print("Action: ", action)
 
 
-    position = env.sim.data.qpos.tolist()
-    velocity = env.sim.data.qvel.tolist()
-    muscles = env.sim.data.actuator_force.tolist()
-    tendons_len = env.sim.data.ten_length.tolist()
-    action = env.action_space.sample()
+        if getNames:
+            #get the names of every group
+            for i in range(env.sim.model.ntendon):
+                print('name of geom ', i, ' : ', env.sim.model.geom(i).name)
+    else:
+        position = env.data.qpos.tolist()
+        velocity = env.data.qvel.tolist()
+        muscles = env.data.actuator_force.tolist()
+        tendons_len = env.data.ten_length.tolist()
+        action = env.action_space.sample()
 
-    print("total number of DoF in the model: ", env.sim.model.nv)
-    print("position: ", position)
+        print("total number of DoF in the model: ", env.model.nv)
+        print("position: ", position)
 
-    print("total muscles: ", len(muscles))
-    print("Muscles: ", muscles)
-    print("total Tendons: ", tendons_len)
-    print("Number of actions in the model: ", len(action))
-    print("Action: ", action)
+        print("total muscles: ", len(muscles))
+        print("Muscles: ", muscles)
+        print("total Tendons: ", tendons_len)
+        print("Number of actions in the model: ", len(action))
+        print("Action: ", action)
 
 
-    if getNames:
-        #get the names of every group
-        for i in range(env.sim.model.ntendon):
-            print('name of geom ', i, ' : ', env.sim.model.geom(i).name)
+        if getNames:
+            #get the names of every group
+            for i in range(env.model.ntendon):
+                print('name of geom ', i, ' : ', env.model.geom(i).name)
 
 
 def plotMuscle(muscle, muscleName, colorValue, nSteps):
@@ -78,7 +98,6 @@ def oneRun(env, visual, plotFlag, randAction, policy, T):
             action = policy(obs)
         if visual:
             env.mj_render()
-            # Render env output to video
         if plotFlag:
             muscles = env.sim.data.actuator_force.tolist()
             position = env.sim.data.qpos.tolist()
@@ -117,7 +136,6 @@ def multipleRun(env, visual, plotFlag, randAction, policy, totEpisodes):
                 action = policy(obs)
             if visual:
                 env.mj_render()
-            # Render env output to video
             if plotFlag:
                 muscles = env.sim.data.actuator_force.tolist()
                 position = env.sim.data.qpos.tolist()
@@ -132,7 +150,7 @@ def multipleRun(env, visual, plotFlag, randAction, policy, totEpisodes):
         print("Reward: ", reward)
     env.close()
 
-def main(env_string, visual, randAction, plotFlag, sarcFlag, samples, testFlag = False, tot_episodes=5, T=500):
+def main(env_string, foldername, visual, randAction, plotFlag, sarcFlag, samples, testFlag = False, tot_episodes=5, T=500):
 
     #Sarcopedia Flag only replace "myo" with "myoSarc" the weakness on muscles is added automatically
     if sarcFlag:
@@ -149,11 +167,9 @@ def main(env_string, visual, randAction, plotFlag, sarcFlag, samples, testFlag =
     action = env.action_space.sample()
 
 
-    foldername = "baselines_DEPRL\myoLegWalk_20230514\myoLeg"
-    amp_foldername = "baselines_DEPRL\deprl_baseline\myo_amputation_1"
 
     if not randAction:
-        policy = deprl.load_baseline(env)
+        policy = deprl.load(foldername, env)
     else:
         policy = None
 
@@ -185,30 +201,68 @@ def main(env_string, visual, randAction, plotFlag, sarcFlag, samples, testFlag =
 
 
 # Press the green button in the gutter to run the script.
+
 if __name__ == '__main__':
 
-     visual = True # Visual mujoco representation
-     randAction = True # Just for testing random movements
-     plotFlag = False # Enable if we want plots of muscles and joint movement
-     sarcFlag = False # Sarcopenia on the model enabled or not
-     samples = 300 # how many samples do we want to get from the plots, if plotFlag is active
-     testFlag = False
+    healthy_foldername = "baselines_DEPRL\myoLegWalk_20230514\myoLeg\\"
+    amp_foldername = "baselines_DEPRL\myo_amputation_1\\"
 
-     env_walk = "myoLegWalk-v0"
-     # 80 actions and muscles, 34 DoF
-     env_rough = "myoLegRoughTerrainWalk-v0"
-     env_chase = "myoChallengeChaseTagP1-v1"
-     env_amp = "myoAmpWalk-v0"
-     # 34 DoF 78 actions and muscles
-
-     failed = True ## Loop to get graphs if model falls down, repeating until gathering required samples
-     while failed:
-         failed = main(env_string=env_amp, visual = visual, randAction = randAction, plotFlag = plotFlag, sarcFlag = sarcFlag, samples = samples, testFlag=testFlag)
+    env_hand = 'HandReach-v1'
+    env_walk = "myoLegWalk-v0"
+    # 80 actions and muscles, 34 DoF
+    env_rough = "myoLegRoughTerrainWalk-v0"
+    env_hilly = 'myoLegHillyTerrainWalk-v0'
+    env_stairs = 'myoLegStairTerrainWalk-v0'
+    env_chase = "myoChallengeChaseTagP1-v1"
+    env_challenge = "myoChallengeChaseTagP2-v0"
+    #### Artificial Limb walk
+    env_amp_2DoF = 'myoAmpWalk-v0'
+    env_amp_1DoF = 'myoAmp1DoFWalk-v0'
+    env_amp_challenge = 'myoChallengeAmputeeWalk-v1'
 
 
 
-     #env = gym.make(env_walk, reset_type="random")
-     #modelCharacteristics(env)
-     print("Process Finished")
+    ################################
+    ######Selection Begins##########
+    ################################
 
-     exit()
+    env_string = env_amp_1DoF
+
+    gymnasiumFlag = False
+    verifyModel = False # flag to analyse model characteristics, no simulation performed
+    visual = True # Visual mujoco representation
+    randAction = True # Just for testing random movements
+    plotFlag = False # Enable if we want plots of muscles and joint movement
+    sarcFlag = False # Sarcopenia on the model enabled or not
+    testFlag = True # True run once the time specified in timeRunning, False goes for totEpisodes number, resets every time the model fails.
+    samples = 300 # how many samples do we want to get from the plots, if plotFlag is active
+    totEpisodes = 3
+    timeRunning = 2000 # only add if using testFlag = True
+
+    if gymnasiumFlag:
+        import gymnasium as gym
+    else:
+        import gym
+
+
+    if env_string == 'myoAmpWalk-v0' or env_string == 'myoChallengeAmputeeWalk-v0':
+        foldername = amp_foldername
+    else:
+        foldername = healthy_foldername
+
+
+    # 34 DoF 78 actions and muscles
+
+    if verifyModel:
+        env = gym.make(env_string)
+        modelCharacteristics(env, importGymnasium=gymnasiumFlag)
+    else:
+        failed = True ## Loop to get graphs if model falls down, repeating until gathering required samples
+        while failed:
+            failed = main(env_string=env_string, foldername=foldername, visual=visual, randAction=randAction, plotFlag=plotFlag, sarcFlag=sarcFlag, samples=samples, testFlag=testFlag, tot_episodes=totEpisodes, T=timeRunning)
+
+
+    #env = gym.make(env_walk, reset_type="random")
+    #modelCharacteristics(env)
+
+    print("Process Finished")
