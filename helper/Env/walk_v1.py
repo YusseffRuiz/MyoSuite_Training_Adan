@@ -31,12 +31,14 @@ class WalkEnvV0(BaseV0):
 
     DEFAULT_RWD_KEYS_AND_WEIGHTS = {
         #increase reward per time walking
-        "vel_reward": 5.0,
+        "vel_reward": 10.0,
         "done": -100,
-        "cyclic_hip": -10,
+        "cyclic_hip": -5,
         "ref_rot": 10.0,
         "joint_angle_rew": 5.0,
-        "mirror_leg": -10,
+        "staying_in_place": -5,
+        "mirror_leg" : 20,
+        #"zR_mov_penalty" : 5,
     }
 
     def __init__(self, model_path, obsd_model_path=None, seed=None, **kwargs):
@@ -82,16 +84,21 @@ class WalkEnvV0(BaseV0):
         self.target_rot = target_rot
         self.steps = 0
         self.help_step = 0
-        self.target_pos = None
-        self.ankle_angles = np.empty(50)
-        self.artfoot_angles = np.empty(50)
+        self.history_size = 300
+        self.initial_pos = None
+        self.ankle_touch = np.empty(self.history_size)
+        self.artfoot_touch = np.empty(self.history_size)
         self.grf_sensor_names = ['r_foot', 'r_toes', 'l_prosth']
+
+
 
         super()._setup(
             obs_keys=obs_keys, weighted_reward_keys=weighted_reward_keys, **kwargs
         )
-        self.init_qpos[:] = self.sim.model.key_qpos[0]
+        self.init_qpos[:] = self.sim.model.key_qpos[2]
         self.init_qvel[:] = 0.0
+
+
 
 
     def get_obs_dict(self, sim):
@@ -120,6 +127,8 @@ class WalkEnvV0(BaseV0):
         cyclic_hip = self._get_cyclic_rew()
         ref_rot = self._get_ref_rotation_rew()
         mirror_leg_rew = self._get_mirror_leg_rew()
+        staying_in_place = self._get_staying_in_place()
+        #zR_move_penalty = self._get_zR_movement_penalty()
         joint_angle_rew = self._get_joint_angle_rew(['hip_adduction_l', 'hip_adduction_r', 'hip_rotation_l',
                                                      'hip_rotation_r'])
 
@@ -136,7 +145,9 @@ class WalkEnvV0(BaseV0):
                 ('cyclic_hip',  cyclic_hip),
                 ('ref_rot',  ref_rot),
                 ('joint_angle_rew', joint_angle_rew),
+                ('staying_in_place', staying_in_place),
                 ('mirror_leg', mirror_leg_rew),
+                #('zR_mov_penalty', zR_move_penalty),
                 ('act_mag', act_mag),
                 # Must keys
                 ("sparse", vel_reward),
@@ -152,11 +163,11 @@ class WalkEnvV0(BaseV0):
     def get_randomized_initial_state(self):
         # randomly start with flexed left or right knee
         if self.np_random.uniform() < 0.5:
-            qpos = self.sim.model.key_qpos[0].copy()
-            qvel = self.sim.model.key_qvel[0].copy()
+            qpos = self.sim.model.key_qpos[2].copy()
+            qvel = self.sim.model.key_qvel[2].copy()
         else:
-            qpos = self.sim.model.key_qpos[1].copy()
-            qvel = self.sim.model.key_qvel[1].copy()
+            qpos = self.sim.model.key_qpos[2].copy()
+            qvel = self.sim.model.key_qvel[2].copy()
         # randomize qpos coordinates
         # but dont change height or rot state
         rot_state = qpos[3:7]
@@ -169,19 +180,29 @@ class WalkEnvV0(BaseV0):
     def step(self, *args, **kwargs):
         obs, reward, done, info = super().step(*args, **kwargs)
         self.steps += 1
-        self.help_step+=1
+        grf = self.obs_dict['grf'].copy()
+        if grf[2] > 0:
+            grf[2] = 1
+        if grf[0] > 0:
+            grf[0] = 1
+        if grf[1] > 0:
+            grf[1] = 1
+        #print("grf: right: ", grf[0], " toes: ", grf[1], " left: ", grf[2]) # troubleshoot values of GRF
+        self.artfoot_touch[self.help_step] = grf[0]
+        self.ankle_touch[self.help_step] = grf[2]
+        self.help_step += 1
         return obs, reward, done, info
 
     def reset(self):
         self.steps = 0
-        self.init_qpos[:] = self.sim.model.key_qpos[0]
+        self.init_qpos[:] = self.sim.model.key_qpos[2]
         self.init_qvel[:] = 0.0
         if self.reset_type == "random":
             qpos, qvel = self.get_randomized_initial_state()
         elif self.reset_type == "init":
-            qpos, qvel = self.sim.model.key_qpos[0], self.sim.model.key_qvel[0]
+            qpos, qvel = self.sim.model.key_qpos[2], self.sim.model.key_qvel[2]
         else:
-            qpos, qvel = self.sim.model.key_qpos[1], self.sim.model.key_qvel[1]
+            qpos, qvel = self.sim.model.key_qpos[2], self.sim.model.key_qvel[2]
         self.robot.sync_sims(self.sim, self.sim_obsd)
         obs = super().reset(reset_qpos=qpos, reset_qvel=qvel)
         return obs
@@ -217,14 +238,34 @@ class WalkEnvV0(BaseV0):
         mag = np.mean(np.abs(joint_angles))
         return np.exp(-5 * mag)
 
+
+    def _get_staying_in_place(self):
+        """
+        Penalise staying close to the initial position of pelvis traslation up to a certain threshold.
+        """
+        initial_pos = [
+            self.initial_pos if self.initial_pos is not None else self.init_qpos[1]
+        ][0] ## This is the movement of Y [1], if looking X, is [0]
+        res = (self.sim.data.qpos[1] - initial_pos)
+        if(res < 0):
+            return 1
+
+        diff = np.exp(-res)
+
+        return diff
+
     def _get_mirror_leg_rew(self):
-        mean = 0
-        self.ankle_angles[self.help_step] = self._get_angle(["ankle_angle_r"])
-        self.artfoot_angles[self.help_step] = self._get_angle(["zR_FootToAnkleAssembly"])
-        if(self.help_step>=49):
-            mean = np.mean(np.abs(self.artfoot_angles)) - np.mean(np.abs(self.ankle_angles))
-            self.help_step = 0
-        return mean
+        imitationReward = 0
+        if(self.help_step<self.history_size):
+            return 0 # Not enough data
+
+        similarity = np.linalg.norm(np.abs(np.sum(self.artfoot_touch) - np.sum(self.ankle_touch)))
+        #print(similarity)
+        if similarity > 10:
+            similarity = 10
+        imitationReward = np.exp(-similarity)
+        self.help_step = 0
+        return imitationReward
 
 
     def _get_foot_contact(self):
@@ -241,7 +282,7 @@ class WalkEnvV0(BaseV0):
             return 0
 
     def _get_grf(self):
-        return np.array([self.sim.data.sensor(sens_name).data[0] for sens_name in self.grf_sensor_names]).copy()
+        return np.array([self.sim.data.sensor(sens_name).data[0] for sens_name in self.grf_sensor_names])
 
     def _get_feet_heights(self):
         """
@@ -375,7 +416,7 @@ class WalkEnvV0(BaseV0):
 
 class StandEnvV0(BaseV0):
     # TODO
-    # Verify reward function is good, seems good
+    # Right now is standing on one leg, it should stand on both, modify feet on ground reward.
     DEFAULT_OBS_KEYS = [
         "qpos_without_xy",
         "qvel",
@@ -393,9 +434,10 @@ class StandEnvV0(BaseV0):
     DEFAULT_RWD_KEYS_AND_WEIGHTS = {
         #increase reward per time walking
         "done": -100,
-        "pelvis_move": 5,
+        "pelvis_move": 10,
         "foot_contact": 10.0,
         "ref_rot": 5,
+        "zR_mov_penalty" : 10,
     }
 
     def __init__(self, model_path, obsd_model_path=None, seed=None, **kwargs):
@@ -436,11 +478,14 @@ class StandEnvV0(BaseV0):
         self.steps = 0
         self.target_pos = None
         self.grf_sensor_names = ['r_foot', 'r_toes', 'l_prosth']
+        # Initialize the history buffer for zR_FootToAnkleAssembly joint angles
+        self.history_size = 6
+        self.zR_FootToAnkleAssembly_history = collections.deque(maxlen=self.history_size)
 
         super()._setup(
             obs_keys=obs_keys, weighted_reward_keys=weighted_reward_keys, **kwargs
         )
-        self.init_qpos[:] = self.sim.model.key_qpos[0]
+        self.init_qpos[:] = self.sim.model.key_qpos[2]
         self.init_qvel[:] = 0.0
 
 
@@ -469,6 +514,7 @@ class StandEnvV0(BaseV0):
         ref_rot = self._get_ref_rotation_rew()
         pelvis_move = self._get_pelvis_move()
         foot_contact = self._get_foot_contact()
+        zR_move_penalty = self._get_zR_movement_penalty()
 
         act_mag = (
             np.linalg.norm(self.obs_dict["act"], axis=-1) / self.sim.model.na
@@ -482,10 +528,11 @@ class StandEnvV0(BaseV0):
                 ("ref_rot", ref_rot),
                 ("pelvis_move", pelvis_move),
                 ("act_mag", act_mag),
-                ("foot_contact", foot_contact),
+                ("foot_contact", -foot_contact),
+                ("zR_mov_penalty", -zR_move_penalty),
                 # Must keys
                 ("sparse", pelvis_move),
-                ("solved", pelvis_move >= 1.0),
+                ("solved", pelvis_move >= 0.8),
                 ("done", self._get_done()),
             )
         )
@@ -497,11 +544,11 @@ class StandEnvV0(BaseV0):
     def get_randomized_initial_state(self):
         # randomly start with flexed left or right knee
         if self.np_random.uniform() < 0.5:
-            qpos = self.sim.model.key_qpos[0].copy()
-            qvel = self.sim.model.key_qvel[0].copy()
+            qpos = self.sim.model.key_qpos[2].copy()
+            qvel = self.sim.model.key_qvel[2].copy()
         else:
-            qpos = self.sim.model.key_qpos[1].copy()
-            qvel = self.sim.model.key_qvel[1].copy()
+            qpos = self.sim.model.key_qpos[2].copy()
+            qvel = self.sim.model.key_qvel[2].copy()
         # randomize qpos coordinates
         # but dont change height or rot state
         rot_state = qpos[3:7]
@@ -514,18 +561,20 @@ class StandEnvV0(BaseV0):
     def step(self, *args, **kwargs):
         obs, reward, done, info = super().step(*args, **kwargs)
         self.steps += 1
+        current_angle = self._get_angle(["zR_FootToAnkleAssembly"])
+        self.zR_FootToAnkleAssembly_history.append(current_angle)
         return obs, reward, done, info
 
     def reset(self):
         self.steps = 0
-        self.init_qpos[:] = self.sim.model.key_qpos[0]
+        self.init_qpos[:] = self.sim.model.key_qpos[2]
         self.init_qvel[:] = 0.0
         if self.reset_type == "random":
             qpos, qvel = self.get_randomized_initial_state()
         elif self.reset_type == "init":
-            qpos, qvel = self.sim.model.key_qpos[0], self.sim.model.key_qvel[0]
+            qpos, qvel = self.sim.model.key_qpos[2], self.sim.model.key_qvel[2]
         else:
-            qpos, qvel = self.sim.model.key_qpos[1], self.sim.model.key_qvel[1]
+            qpos, qvel = self.sim.model.key_qpos[2], self.sim.model.key_qvel[2]
         self.robot.sync_sims(self.sim, self.sim_obsd)
         obs = super().reset(reset_qpos=qpos, reset_qvel=qvel)
         return obs
@@ -561,18 +610,34 @@ class StandEnvV0(BaseV0):
         mag = np.mean(np.abs(joint_angles))
         return np.exp(-5 * mag)
 
+    def _get_zR_movement_penalty(self):
+        if len(self.zR_FootToAnkleAssembly_history) < 2:
+            # Not enough data to calculate change
+            return 0
+
+            # Calculate the absolute change in angle from the last step
+        angle_change = np.abs(self.zR_FootToAnkleAssembly_history[-1] - self.zR_FootToAnkleAssembly_history[-2])
+
+        # Define a threshold for "excessive" movement (this is arbitrary and should be tuned)
+        excessive_threshold = 0.05  # Example threshold, adjust based on your simulation
+
+        # Calculate the penalty
+        # This penalty could be linear, quadratic, or even exponential based on how strongly you want to penalize the movement
+        if angle_change > excessive_threshold:
+            penalty = np.linalg.norm(angle_change - excessive_threshold) ** 2
+        else:
+            penalty = 0
+
+        return penalty
+
     def _get_foot_contact(self):
         foot_contact = self._get_grf()
-        higherFlag = True
-        for contact in foot_contact:
-            if contact>0 and higherFlag==True:
-                higherFlag =True
-            else:
-                higherFlag = False
-        if(higherFlag==True):
-            return 1
+
+        threshold = 0.5  # Adjust this threshold
+        if foot_contact[0] > threshold and foot_contact[1] > threshold and foot_contact[2] > threshold:  # 0 -> l_foot, 1 -> toes, 2 -> prosthetic foot
+            return 0 # Provide a null reward
         else:
-            return 0
+            return 1  # Negative reward if both feet are not in contact
 
     def _get_grf(self):
         return np.array([self.sim.data.sensor(sens_name).data[0] for sens_name in self.grf_sensor_names]).copy()
@@ -774,7 +839,7 @@ class TerrainEnvV0(WalkEnvV0):
         BaseV0._setup(
             self, obs_keys=obs_keys, weighted_reward_keys=weighted_reward_keys, **kwargs
         )
-        self.init_qpos[:] = self.sim.model.key_qpos[0]
+        self.init_qpos[:] = self.sim.model.key_qpos[2]
         self.init_qvel[:] = 0.0
 
     def reset(self):
@@ -856,7 +921,7 @@ class TerrainEnvV0(WalkEnvV0):
         elif self.reset_type == "init":
             qpos, qvel = self.sim.model.key_qpos[2], self.sim.model.key_qvel[2]
         else:
-            qpos, qvel = self.sim.model.key_qpos[0], self.sim.model.key_qvel[0]
+            qpos, qvel = self.sim.model.key_qpos[2], self.sim.model.key_qvel[2]
         self.robot.sync_sims(self.sim, self.sim_obsd)
         obs = BaseV0.reset(self, reset_qpos=qpos, reset_qvel=qvel)
         return obs
