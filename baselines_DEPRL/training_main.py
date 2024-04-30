@@ -49,7 +49,7 @@ def train(
         tonic_conf=tonic_conf,
         env_args=config["env_args"],
     )
-    # TODO check if this neesd to be changed
+    # TODO check if this need to be changed
     environment.initialize(seed=tonic_conf["seed"])
     # Build the testing environment.
     _test_environment = (
@@ -92,7 +92,7 @@ def train(
     # Initialize the logger to save data to the path environment/name/seed.
     logger.initialize(path, script_path=__file__, config=config)
     if checkpoint_path:
-        print("checkpoint found")
+        #print("checkpoint found")
         # Load the logger from a checkpoint.
         logger.load(checkpoint_path, time_dict)
         # Load the weights of the agent form a checkpoint.
@@ -110,9 +110,7 @@ def train(
 
     # Run some code before training.
     if tonic_conf["before_training"]:
-        exec(tonic_conf["before_training"])
-
-    # Train.
+        exec(tonic_conf["before_training"])    # Train.
     try:
         trainer.run(config, **time_dict)
     except Exception as e:
